@@ -1,0 +1,25 @@
+FROM node:25-alpine
+
+# Add user for directory permission shenanigans
+RUN adduser --disabled-password appuser
+
+# Set working directory
+WORKDIR /app
+
+# Copy source files into the working directory
+COPY . .
+
+# Install dependencies
+RUN npm ci
+
+# Expose Vite port
+EXPOSE ${NODE_PORT}
+
+RUN chown -R appuser:appuser /app
+
+USER appuser
+
+ENV TRUST_PROXY=true
+
+# Run project
+CMD [ "npm", "run", "dev" ]
