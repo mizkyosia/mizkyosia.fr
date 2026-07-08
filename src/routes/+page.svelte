@@ -37,20 +37,6 @@
     const sample = $state(new MeshSurfaceSampler(textMesh));
 </script>
 
-<Align>
-    {#snippet children({ align })}
-        
-        <T is={textMesh}>
-            <T.MeshStandardMaterial
-                color={"#00ff00"}
-                toneMapped={false}
-                metalness={1.0}
-                roughness={0.1}
-            />
-        </T>
-    {/snippet}
-</Align>
-
 <Text
     text="Threlte"
     fontSize={0.5}
