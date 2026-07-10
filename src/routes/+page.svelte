@@ -17,15 +17,17 @@
     const depth = 0,
         pointCount = 5000,
         chunkSize = 1,
-        distanceThreshold = 0.5,
-        rippleStrength = 1,
+        colorDistance = 1,
+        rippleDistance = 0.5,
+        rippleStrength = 30,
         effectStrength = 10;
 
     const { camera, renderer } = useThrelte();
 
     let pointerPos = $state(new THREE.Vector3()),
         pointerPreviousPos = new THREE.Vector3(),
-        pointerDelta = new THREE.Vector3();
+        pointerDelta = new THREE.Vector3(),
+        pointerNDC = new THREE.Vector3();
 
     //
     // Create the text geometry
@@ -65,6 +67,7 @@
 
     const __pos = new THREE.Vector3(),
         __delta = new THREE.Vector3(),
+        __chunkPos = new THREE.Vector3(),
         __zero = new THREE.Vector3();
 
     // Raycast
@@ -123,7 +126,7 @@
         const rect = renderer.domElement.getBoundingClientRect();
 
         // Compute position
-        __pos
+        pointerNDC
             .set(
                 ((event.clientX - rect.left) / rect.width) * 2 - 1,
                 -((event.clientY - rect.top) / rect.height) * 2 + 1,
@@ -132,56 +135,6 @@
             .unproject(camera.current)
             .sub(camera.current.position)
             .normalize();
-
-        ray.set(camera.current.position, __pos);
-
-        // Transfer old value
-        pointerPreviousPos.copy(pointerPos);
-
-        // Intersection with plane (z=0), or fallback to old value
-        pointerPos = ray.intersectPlane(plane, __zero)?.clone() ?? pointerPos;
-
-        // Update delta position
-        pointerDelta.subVectors(pointerPos, pointerPreviousPos);
-
-        forEachNearbyPoint(
-            pointerPos,
-            (p) => {
-                const x = particlesPosition.getX(p),
-                    y = particlesPosition.getY(p);
-
-                const dist = Math.sqrt(
-                    Math.pow(x - pointerPos.x, 2) +
-                        Math.pow(y - pointerPos.y, 2),
-                );
-
-                const influence = THREE.MathUtils.smoothstep(
-                    distanceThreshold,
-                    0,
-                    dist,
-                );
-
-                const color = influence / distanceThreshold;
-
-                particlesColor.setXYZ(p, color, 0, (1 - color) / 2);
-
-                if(p == 17) console.log(dist, influence, color);
-
-                __delta
-                    .copy(pointerDelta)
-                    .multiplyScalar(
-                        Math.max(0, distanceThreshold - dist) * rippleStrength,
-                    );
-
-                // Move point
-                movePoint(p, __delta);
-                movingParticles.add(p);
-            },
-            distanceThreshold,
-        );
-
-        particlesColor.needsUpdate = true;
-        particlesPosition.needsUpdate = true;
     }
 
     function forEachNearbyPoint(
@@ -193,11 +146,8 @@
 
         const coords = getChunkCoords(pos);
 
-        const test = [];
-
         for (let x = coords.x - chunkSpan; x <= coords.x + chunkSpan; x++)
             for (let y = coords.y - chunkSpan; y <= coords.y + chunkSpan; y++) {
-                test.push(`${x},${y}`);
                 const chunk = chunks.get(`${x},${y}`);
                 // Early return if needed
                 if (chunk) for (const p of chunk) if (callback(p)) return;
@@ -205,7 +155,7 @@
     }
 
     function getChunkCoords(pos: THREE.Vector3): THREE.Vector3 {
-        return __pos.copy(pos).divideScalar(chunkSize).floor();
+        return __chunkPos.copy(pos).divideScalar(chunkSize).floor();
     }
 
     function getChunkCoordsString(
@@ -253,27 +203,80 @@
             );
 
             // Color normalized to [0, 1]
-            const color =
-                Math.max(0, distanceThreshold - dist) / distanceThreshold;
+            const color = Math.max(0, colorDistance - dist) / colorDistance;
             particlesColor.setXYZ(p, color, 0, (1 - color) / 2);
 
             // If we're back to start, remove it from the moving particles
-            if (__pos.distanceToSquared(startPos) < 1e-6) {
+            if (__pos.set(x, y).distanceToSquared(startPos) < 1e-6) {
                 movingParticles.delete(p);
                 continue;
             }
 
             movePoint(p, __pos.lerp(startPos, effectStrength * dt), true);
         }
-        particlesPosition.needsUpdate = true;
-        particlesColor.needsUpdate = true;
     }
 
     // For average FPS calculations
     useTask((dt) => {
         moveBackPoints(dt);
+
+        // Fetch new delta + position
+        // Transfer old value
+        pointerPreviousPos.copy(pointerPos);
+
+        ray.set(camera.current.position, pointerNDC);
+
+        // Intersection with plane (z=0), or fallback to old value
+        pointerPos = ray.intersectPlane(plane, __zero)?.clone() ?? pointerPos;
+
+        // Update delta position
+        pointerDelta.subVectors(pointerPos, pointerPreviousPos);
+
+        forEachNearbyPoint(
+            pointerPreviousPos,
+            (p) => {
+                particlesColor.setXYZ(p, 0, 0, 0.5);
+            },
+            colorDistance,
+        );
+
+        forEachNearbyPoint(
+            pointerPos,
+            (p) => {
+                __pos.set(
+                    particlesPosition.getX(p) - pointerPos.x,
+                    particlesPosition.getY(p) - pointerPos.y,
+                    0,
+                );
+
+                const distSquared = __pos.lengthSq(),
+                    dist = Math.sqrt(distSquared);
+
+                const t = THREE.MathUtils.clamp(1 - dist / colorDistance, 0, 1);
+
+                const influence = THREE.MathUtils.smoothstep(t, 0, 1);
+
+                particlesColor.setXYZ(p, influence, 0, (1 - influence) / 2);
+
+                __delta
+                    .copy(pointerDelta)
+                    .add(__pos)
+                    .multiplyScalar(
+                        Math.max(0, rippleDistance - dist) * rippleStrength * dt,
+                    );
+
+                // Move point
+                movePoint(p, __delta);
+                movingParticles.add(p);
+            },
+            colorDistance,
+        );
+
         ctx.deltaTime[ctx.nextIndex] = dt;
         ctx.nextIndex = (ctx.nextIndex + 1) % ctx.deltaTime.length;
+
+        particlesPosition.needsUpdate = true;
+        particlesColor.needsUpdate = true;
     });
 </script>
 

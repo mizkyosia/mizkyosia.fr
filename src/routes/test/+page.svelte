@@ -19,7 +19,7 @@
         chunkSize = 1,
         colorDistance = 1,
         rippleDistance = 0.5,
-        rippleStrength = 1,
+        rippleStrength = 50,
         effectStrength = 10;
 
     const { camera, renderer } = useThrelte();
@@ -67,6 +67,7 @@
 
     const __pos = new THREE.Vector3(),
         __delta = new THREE.Vector3(),
+        __chunkPos = new THREE.Vector3(),
         __zero = new THREE.Vector3();
 
     // Raycast
@@ -154,7 +155,7 @@
     }
 
     function getChunkCoords(pos: THREE.Vector3): THREE.Vector3 {
-        return __pos.copy(pos).divideScalar(chunkSize).floor();
+        return __chunkPos.copy(pos).divideScalar(chunkSize).floor();
     }
 
     function getChunkCoordsString(
@@ -242,12 +243,13 @@
         forEachNearbyPoint(
             pointerPos,
             (p) => {
-                const x = particlesPosition.getX(p),
-                    y = particlesPosition.getY(p);
+                __pos.set(
+                    particlesPosition.getX(p) - pointerPos.x,
+                    particlesPosition.getY(p) - pointerPos.y,
+                    0,
+                );
 
-                const distSquared =
-                        Math.pow(x - pointerPos.x, 2) +
-                        Math.pow(y - pointerPos.y, 2),
+                const distSquared = __pos.lengthSq(),
                     dist = Math.sqrt(distSquared);
 
                 const t = THREE.MathUtils.clamp(1 - dist / colorDistance, 0, 1);
@@ -258,8 +260,9 @@
 
                 __delta
                     .copy(pointerDelta)
+                    .add(__pos)
                     .multiplyScalar(
-                        Math.max(0, rippleDistance - dist) * rippleStrength,
+                        Math.max(0, rippleDistance - dist) * rippleStrength * dt,
                     );
 
                 // Move point
