@@ -26,6 +26,7 @@
 		"@threlte/core": "^8.5.16",
 		"@threlte/extras": "^9.21.0",
 		"dotenv": "^17.4.2",
-		"three": "^0.185.0"
+		"stats.js": "^0.17.0",
+		"three": "^0.185.1"
 	}
 }

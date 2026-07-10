@@ -1,19 +1,10 @@
 <script lang="ts">
 	import "./layout.css";
 	import favicon from "$lib/assets/favicon.svg";
-	import { Canvas, T, useTask } from "@threlte/core";
+	import { Canvas, T } from "@threlte/core";
 	import { Environment, Grid, OrbitControls } from "@threlte/extras";
-	import { setContext } from "svelte";
 
 	let { children } = $props();
-	let ctx = $state({ deltaTime: new Array(10).fill(1 / 60), nextIndex: 0 });
-	setContext("deltaTime", ctx);
-
-	let averageFps = $derived(
-		Math.floor(
-			ctx.deltaTime.length / ctx.deltaTime.reduce((a, b) => a + b),
-		),
-	);
 </script>
 
 <svelte:head><link rel="icon" href={favicon} /></svelte:head>
@@ -48,8 +39,4 @@
 
 		<T.PointLight position={[10, 10, 10]} intensity={1} />
 	</Canvas>
-
-	<div class="text-orange-500 absolute z-50 top-0">
-		Average FPS : {averageFps}
-	</div>
 </main>

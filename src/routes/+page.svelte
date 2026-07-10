@@ -4,23 +4,23 @@
 
     import { FontLoader } from "three/addons/loaders/FontLoader.js";
     import { TextGeometry } from "three/addons/geometries/TextGeometry.js";
-    import { MeshSurfaceSampler } from "three/addons/math/MeshSurfaceSampler.js";
 
-    import fontJson from "$lib/fonts/helvetiker_regular.typeface.json";
-    import heavyDataFont from "$lib/fonts/HeavyDataNerdFont-Regular.ttf?url";
-    import { getContext } from "svelte";
+    import fontData from "$lib/fonts/HeavyData Nerd Font_Regular.json";
+    import { pointInTriangle } from "$lib";
+    import Stats from "stats.js";
+    import { onMount } from "svelte";
 
     const movingParticles = new Set<number>();
     const chunks = new Map<`${number},${number}`, Set<number>>();
-    const font = new FontLoader().parse(fontJson);
+    const font = new FontLoader().parse(fontData);
     const plane = new THREE.Plane(new THREE.Vector3(0, 0, 1), 0);
     const depth = 0,
-        pointCount = 5000,
         chunkSize = 1,
-        colorDistance = 1,
-        rippleDistance = 0.5,
-        rippleStrength = 30,
-        effectStrength = 10;
+        colorDistance = 1.2,
+        rippleDistance = 0.6,
+        rippleStrength = 100,
+        effectStrength = 10,
+        pushbackStrength = 20;
 
     const { camera, renderer } = useThrelte();
 
@@ -44,22 +44,13 @@
     textGeometry.center();
 
     //
-    // Build the sampler
-    //
-    const sampler = new MeshSurfaceSampler(new THREE.Mesh(textGeometry))
-        .setWeightAttribute("weight")
-        .build();
-
-    //
     // Sample points
     //
     const accepted: THREE.Vector3[] = [];
-    const candidate = new THREE.Vector3();
 
-    const minDistance = 0.05;
-    let tries = 0;
-
-    const ctx = getContext("deltaTime");
+    const spacing = 0.05,
+        dx = spacing,
+        dy = (spacing * Math.sqrt(3)) / 2;
 
     //
     // ////////// BUFFER/TEMP VARIABLES FOR OPTIMIZATION
@@ -73,31 +64,54 @@
     // Raycast
     const ray = new THREE.Ray(camera.current.position, __pos);
 
-    while (accepted.length < pointCount && tries < 2 * pointCount) {
-        sampler.sample(candidate);
+    const textMin = textGeometry.boundingBox!.min,
+        textMax = textGeometry.boundingBox!.max;
 
-        let valid = true;
+    const __p = new THREE.Vector2(),
+        __a = new THREE.Vector2(),
+        __b = new THREE.Vector2(),
+        __c = new THREE.Vector2();
 
-        forEachNearbyPoint(candidate, (p) => {
-            if (
-                accepted[p].distanceToSquared(candidate) <
-                minDistance * minDistance
-            ) {
-                valid = false;
-                return true; // Early return
+    const textPoints = textGeometry.getAttribute("position");
+
+    textGeometry.computeBoundingBox();
+    for (let y = textMin.y; y <= textMax.y; y += dy) {
+        const offset = (Math.floor(y / dy) % 2) * dx * 0.5;
+
+        for (let x = textMin.x + offset; x <= textMax.x; x += dx) {
+            __p.set(x, y);
+
+            let valid = false;
+
+            for (let i = 0; i < textPoints.count / 3; i++) {
+                if (
+                    pointInTriangle(
+                        __p,
+                        __a.set(textPoints.getX(3 * i), textPoints.getY(3 * i)),
+                        __b.set(
+                            textPoints.getX(3 * i + 1),
+                            textPoints.getY(3 * i + 1),
+                        ),
+                        __c.set(
+                            textPoints.getX(3 * i + 2),
+                            textPoints.getY(3 * i + 2),
+                        ),
+                    )
+                ) {
+                    valid = true;
+                    break;
+                }
             }
-        });
 
-        if (valid) {
-            chunks
-                .getOrInsertComputed(
-                    getChunkCoordsString(candidate),
-                    () => new Set(),
-                )
-                .add(accepted.length);
-            accepted.push(candidate.clone());
-        } else {
-            tries++;
+            if (valid) {
+                chunks
+                    .getOrInsertComputed(
+                        getChunkCoordsString([x, y]),
+                        () => new Set(),
+                    )
+                    .add(accepted.length);
+                accepted.push(new THREE.Vector3(x, y));
+            }
         }
     }
 
@@ -118,6 +132,8 @@
 
     particles.setAttribute("color", particlesColor);
     particles.setAttribute("position", particlesPosition);
+
+    console.log("Total points : ", accepted.length);
 
     //
     // Pointer 3D position
@@ -174,19 +190,17 @@
         const x = particlesPosition.getX(p),
             y = particlesPosition.getY(p);
 
-        const chunkPos = getChunkCoordsString([x, y]);
-
         const newX = delta.x + (absolute ? 0 : x),
             newY = delta.y + (absolute ? 0 : y);
 
         particlesPosition.setXY(p, newX, newY);
 
-        // Update chunk position
-        const newChunkPos = getChunkCoordsString([newX, newY]);
-        if (chunkPos !== newChunkPos) {
-            chunks.get(chunkPos)?.delete(p);
-            chunks.getOrInsertComputed(newChunkPos, () => new Set()).add(p);
-        }
+        // Update chunk position (Deemed unnecessary in the end)
+        // const newChunkPos = getChunkCoordsString([newX, newY]);
+        // if (chunkPos !== newChunkPos) {
+        //     chunks.get(chunkPos)?.delete(p);
+        //     chunks.getOrInsertComputed(newChunkPos, () => new Set()).add(p);
+        // }
     }
 
     function moveBackPoints(dt: number) {
@@ -218,6 +232,9 @@
 
     // For average FPS calculations
     useTask((dt) => {
+        stats.end();
+        stats.begin();
+
         moveBackPoints(dt);
 
         // Fetch new delta + position
@@ -260,9 +277,14 @@
 
                 __delta
                     .copy(pointerDelta)
-                    .add(__pos)
+                    .multiplyScalar(rippleStrength)
+                    .add(__pos.multiplyScalar(pushbackStrength))
                     .multiplyScalar(
-                        Math.max(0, rippleDistance - dist) * rippleStrength * dt,
+                        THREE.MathUtils.smoothstep(
+                            Math.max(0, 1 - dist / rippleDistance),
+                            0,
+                            1,
+                        ) * dt,
                     );
 
                 // Move point
@@ -272,11 +294,15 @@
             colorDistance,
         );
 
-        ctx.deltaTime[ctx.nextIndex] = dt;
-        ctx.nextIndex = (ctx.nextIndex + 1) % ctx.deltaTime.length;
-
         particlesPosition.needsUpdate = true;
         particlesColor.needsUpdate = true;
+    });
+
+    // Stats
+    const stats = new Stats();
+
+    onMount(() => {
+        renderer.domElement.parentElement!.appendChild(stats.dom);
     });
 </script>
 
@@ -288,7 +314,7 @@
 </T.Mesh>
 
 <T.Points position={[0, 0, 0.01]} geometry={particles}>
-    <T.PointsMaterial size={0.08} sizeAttenuation vertexColors />
+    <T.PointsMaterial size={spacing * 2.5} sizeAttenuation vertexColors />
 </T.Points>
 
 <T.Mesh position={pointerPos.toArray()} scale={0.1}>
