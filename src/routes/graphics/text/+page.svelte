@@ -5,10 +5,13 @@
     import { FontLoader } from "three/addons/loaders/FontLoader.js";
     import { TextGeometry } from "three/addons/geometries/TextGeometry.js";
 
-    import fontData from "$lib/fonts/HeavyData Nerd Font_Regular.json";
+    import fontData from "$lib/fonts/EnvyCodeR Nerd Font Propo_Bold.json";
     import { pointInTriangle } from "$lib";
     import Stats from "stats.js";
     import { onMount } from "svelte";
+
+    import vertexShader from "$lib/shaders/text/vert.glsl?raw";
+    import fragmentShader from "$lib/shaders/text/frag.glsl?raw";
 
     const movingParticles = new Set<number>();
     const chunks = new Map<`${number},${number}`, Set<number>>();
@@ -20,7 +23,7 @@
         rippleDistance = 0.6,
         rippleStrength = 100,
         effectStrength = 10,
-        pushbackStrength = 20;
+        pushbackStrength = 25;
 
     const { camera, renderer } = useThrelte();
 
@@ -28,6 +31,9 @@
         pointerPreviousPos = new THREE.Vector3(),
         pointerDelta = new THREE.Vector3(),
         pointerNDC = new THREE.Vector3();
+
+    let currentTime = $state(Date.now() / 1000),
+        uniformsNeedUpdate = $state(false);
 
     //
     // Create the text geometry
@@ -123,17 +129,32 @@
         new Float32Array(accepted.flatMap((v) => v.toArray())),
         3,
     );
-    const particlesColor = new THREE.BufferAttribute(
-        new Float32Array(accepted.length * 3).map((_, i) =>
-            i % 3 == 2 ? 0.5 : 0,
-        ),
-        3,
-    );
 
-    particles.setAttribute("color", particlesColor);
     particles.setAttribute("position", particlesPosition);
 
     console.log("Total points : ", accepted.length);
+
+    const shaderMat = new THREE.ShaderMaterial({
+        vertexShader,
+        fragmentShader,
+        uniforms: {
+            uPointer: {
+                value: pointerPos,
+            },
+            uRadius: {
+                value: 2,
+            },
+            uTime: {
+                value: 5,
+            },
+            uPointSize: {
+                value: 0.5,
+            },
+        },
+        transparent: true,
+        blending: THREE.NormalBlending,
+        depthWrite: false,
+    });
 
     //
     // Pointer 3D position
@@ -218,7 +239,7 @@
 
             // Color normalized to [0, 1]
             const color = Math.max(0, colorDistance - dist) / colorDistance;
-            particlesColor.setXYZ(p, color, 0, (1 - color) / 2);
+            // particlesColor.setXYZ(p, color, 0, (1 - color) / 2);
 
             // If we're back to start, remove it from the moving particles
             if (__pos.set(x, y).distanceToSquared(startPos) < 1e-6) {
@@ -235,6 +256,8 @@
         stats.end();
         stats.begin();
 
+        uniformsNeedUpdate = false;
+
         moveBackPoints(dt);
 
         // Fetch new delta + position
@@ -249,13 +272,13 @@
         // Update delta position
         pointerDelta.subVectors(pointerPos, pointerPreviousPos);
 
-        forEachNearbyPoint(
-            pointerPreviousPos,
-            (p) => {
-                particlesColor.setXYZ(p, 0, 0, 0.5);
-            },
-            colorDistance,
-        );
+        // forEachNearbyPoint(
+        //     pointerPreviousPos,
+        //     (p) => {
+        //         particlesColor.setXYZ(p, 0, 0, 0.5);
+        //     },
+        //     colorDistance,
+        // );
 
         forEachNearbyPoint(
             pointerPos,
@@ -273,7 +296,7 @@
 
                 const influence = THREE.MathUtils.smoothstep(t, 0, 1);
 
-                particlesColor.setXYZ(p, influence, 0, (1 - influence) / 2);
+                // particlesColor.setXYZ(p, influence, 0, (1 - influence) / 2);
 
                 __delta
                     .copy(pointerDelta)
@@ -294,8 +317,13 @@
             colorDistance,
         );
 
+        currentTime = Date.now() / 1000; // Time in seconds
+
+        shaderMat.uniforms.uTime.value = Date.now() / 1000;
+        shaderMat.uniforms.uPointer.value.copy(pointerPos);
+        shaderMat.uniformsNeedUpdate = true;
+
         particlesPosition.needsUpdate = true;
-        particlesColor.needsUpdate = true;
     });
 
     // Stats
@@ -308,13 +336,36 @@
 
 <svelte:document onpointermove={movePointer} />
 
-<T.Mesh scale={10}>
+<T.Mesh scale={[20, 10, 1]}>
     <T.PlaneGeometry />
     <T.MeshBasicMaterial color={"#000000"} />
 </T.Mesh>
 
-<T.Points position={[0, 0, 0.01]} geometry={particles}>
-    <T.PointsMaterial size={spacing * 2.5} sizeAttenuation vertexColors />
+<T.Points position={[0, 0, 0.01]} geometry={particles} material={shaderMat}>
+    <!-- <T.PointsMaterial size={spacing * 2.5} sizeAttenuation vertexColors /> -->
+    <!-- <T.ShaderMaterial
+        {fragmentShader}
+        {vertexShader}
+        uniforms={{
+            uPointer: {
+                value: 5,
+            },
+            uRadius: {
+                value: 10,
+            },
+            uTime: {
+                value: currentTime,
+            },
+            uPointSize: {
+                value: 0.5,
+            },
+        }}
+        uniforms.uPointer.value={pointerPos}
+        uniforms.uTime.value={currentTime}
+        uniforms.uRadius.value={1}
+        uniforms.uPointSize.value={1}
+        sizeAttenuation={true}
+    /> -->
 </T.Points>
 
 <T.Mesh position={pointerPos.toArray()} scale={0.1}>
