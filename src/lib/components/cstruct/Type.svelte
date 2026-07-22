@@ -19,7 +19,9 @@
     {#if type.members !== undefined}
         <Definition definition={type as UnionDefinition | StructDefinition} />
     {:else}
-        <i>{type.kind} {type.name}</i>
+        <a href="#{type.kind}-{type.name}" class="italic underline"
+            >{type.kind} {type.name}</a
+        >
     {/if}
 {:else if type.kind === "builtin"}
     <i>{type.name.join(" ")}</i>
@@ -28,5 +30,5 @@
 {:else if type.kind === "pointer"}
     <i><Type type={type.to} />*</i>
 {:else}
-    <a href="#type-{type.name}" class="italic underline">{type.name}</a>
+    <a href="#typedef-{type.name}" class="italic underline">{type.name}</a>
 {/if}

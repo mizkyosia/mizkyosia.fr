@@ -1,24 +1,44 @@
 import type { TokenStream } from "./lexing";
-import type { BuiltinType, BuiltinTypeName, Field, Identifier, PointerTypeRef, StructDefinition, StructTypeRef, TypedefDefinition, TypeDefinition, TypeReference, UnionDefinition, UnionTypeRef } from "./types";
+import type { BuiltinTypeName, Field, Identifier, StructDefinition, StructTypeRef, TypedefDefinition, TypeDefinition, TypeReference, UnionDefinition, UnionTypeRef } from "./types";
 
+
+interface TypeData {
+    size: number;
+    align: number;
+    forward: boolean;
+}
 
 export class Parser {
     /// All declared types, structs & unions
-    private _structs = new Set<string>();
-    private _unions = new Set<string>();
-    private _typedefs = new Set<string>();
+    private _structs = new Map<string, TypeData>();
+    private _unions = new Map<string, TypeData>();
+    private _typedefs = new Map<string, TypeData>();
+
+    public getTypes() {
+        return {
+            structs: this._structs.entries().toArray(),
+            unions: this._unions.entries().toArray(),
+            typedefs: this._typedefs.entries().toArray()
+        }
+    }
 
     public parse(ts: TokenStream): TypeDefinition[] {
         const defs: TypeDefinition[] = [];
 
+        this._structs.clear();
+        this._unions.clear();
+        this._typedefs.clear();
+
         let i = 0;
 
         while (!ts.eof() && i < 10_000) {
-
             if (this.isTypedef(ts))
                 defs.push(...this.parseTypedef(ts));
-
-            else if (this.isUnionOrStructDef(ts)) {
+            // Forward declaration
+            else if (this.isUnionOrStructRef(ts)) {
+                this.parseUnionOrStructRef(ts, true);
+                ts.expect('semicolon');
+            } else if (this.isUnionOrStructDef(ts)) {
                 const def = this.parseUnionOrStructDef(ts);
 
                 if (ts.match('identifier')) {
@@ -63,6 +83,9 @@ export class Parser {
         } else if (ts.match('identifier')) {
             // Consume identifier
             const type = ts.consume() as Identifier;
+
+            if (!this.isTypeRegistered('typedef', type.value))
+                throw new Error(`type ${type.value} referenced before declaration`);
 
             base.type = {
                 kind: 'named',
@@ -168,6 +191,7 @@ export class Parser {
         let fields = this.parseFields(ts);
 
         return fields.map(f => {
+            this.registerType('typedef', f.name);
             return {
                 kind: 'typedef',
                 name: f.name,
@@ -184,10 +208,10 @@ export class Parser {
             );
     }
     private parseUnionOrStructDef(ts: TokenStream): UnionDefinition | StructDefinition {
-        const tok = ts.expectAny({ type: 'keyword', value: 'struct' }, { type: 'keyword', value: 'union' });
+        const kind = ts.expectAny({ type: 'keyword', value: 'struct' }, { type: 'keyword', value: 'union' }).value as ("union" | "struct");
 
         const res: UnionDefinition | StructDefinition = {
-            kind: (tok.value as ("union" | "struct")),
+            kind,
             members: []
         };
 
@@ -205,6 +229,8 @@ export class Parser {
         // Remove closing brace
         ts.consume();
 
+        if (res.name) this.registerType(kind, res.name);
+
         return res;
     }
 
@@ -214,9 +240,16 @@ export class Parser {
      * e.g. `struct S;`
      *  */
     private isUnionOrStructRef(ts: TokenStream) { return (ts.match('keyword', 'struct') || ts.match('keyword', 'union')) && ts.match('identifier', undefined, 1) && !ts.match('brace', '{', 2) }
-    private parseUnionOrStructRef(ts: TokenStream): StructTypeRef | UnionTypeRef {
+    private parseUnionOrStructRef(ts: TokenStream, forward: boolean = false): StructTypeRef | UnionTypeRef {
         const kind = ts.expectAny({ type: 'keyword', value: 'union' }, { type: 'keyword', value: 'struct' }).value as ("union" | "struct");
         const ident = ts.expect('identifier');
+
+        if (!this.isTypeRegistered(kind, ident.value)) {
+            if (forward)
+                this.registerType(kind, ident.value, true);
+            else
+                throw new Error(`${kind} ${ident.value} referenced before initialization`);
+        }
 
         return {
             kind,
@@ -257,10 +290,21 @@ export class Parser {
                     continue;
             }
         }
-
-        console.log('')
     }
 
+    private registerType(kind: TypeDefinition['kind'], name: string, forward: boolean = false) {
+        const map = this[`_${kind}s`];
+        const res = map.get(name);
+
+        if (!(res === undefined || res.forward))
+            throw new Error(`Type error : duplicate definition of ${kind} ${name}`)
+
+        map.set(name, { size: 0, align: 0, forward });
+    }
+
+    private isTypeRegistered(kind: TypeDefinition['kind'], name: string) {
+        return this[`_${kind}s`].has(name);
+    }
 }
 
 export function containsUOSDeclaration(type: TypeDefinition | TypeReference): boolean {

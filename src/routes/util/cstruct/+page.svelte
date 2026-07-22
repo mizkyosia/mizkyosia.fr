@@ -7,6 +7,7 @@
     let lexValue = $state(),
         parseValue: TypeDefinition[] | string = $state([]);
 
+        // Keeping for debugging purposes permayhappenchance ?
     let prettyPrintLex = $derived(JSON.stringify(lexValue, null, 1)),
         prettyPrintParse = $derived(JSON.stringify(parseValue, null, 1));
 
@@ -34,6 +35,8 @@
                 parseValue = (e as Error).message;
             }
             computeTimeParsing = performance.now() - t2;
+
+            console.log(parser.getTypes());
         });
     }
 
