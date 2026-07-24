@@ -1,4 +1,4 @@
-import { type LexerToken, type LexerAutomaton, type TokenOfType, type BuiltinTypeName, baseTypes, keywords, typeQualifiers, type KeywordValue, type TypeQualifierValue } from "./types";
+import { type LexerToken, type LexerAutomaton, type TokenOfType, type BuiltinTypeName, baseTypes, keywords, typeQualifiers, type KeywordValue, type TypeQualifierValue, type Identifier, type ReducedLexerToken, type TokenType } from "./types";
 
 export type LexerError = {
     reason: string,
@@ -38,6 +38,10 @@ export class LexerContext {
     public eof() {
         return this._cursor >= this._input.length;
     }
+
+    public get cursor() {
+        return this._cursor;
+    }
 }
 
 export class Lexer {
@@ -45,7 +49,11 @@ export class Lexer {
     constructor(private _automata: LexerAutomaton[]) { }
 
     public async lex(input: string): Promise<TokenStream> {
-        if (!input) return new TokenStream([]);
+        return this.lexSync(input);
+    }
+
+    public lexSync(input: string): TokenStream {
+        if (!input || input === '') return new TokenStream([]);
 
         const tokens: LexerToken[] = [];
 
@@ -53,9 +61,10 @@ export class Lexer {
 
         consumeLoop: while (!ctx.eof()) {
             for (let a of this._automata) {
-                const token = a(ctx);
+                const start = ctx.cursor;
+                const token = a(ctx)
                 if (token && token.type != "empty") {
-                    tokens.push(token);
+                    tokens.push({ start, end: ctx.cursor, ...token });
                     continue consumeLoop;
                 }
             }
@@ -85,7 +94,7 @@ export class TokenStream {
         return this._index >= this._tokens.length;
     }
 
-    match<T extends LexerToken['type']>(type: T, val?: TokenOfType<T>['value'], offset = 0) {
+    match<T extends TokenType>(type: T, val?: TokenOfType<T>['value'], offset = 0) {
         const t = this.peek(offset) as TokenOfType<T> | undefined;
         if (!t) return false;
         if (t.type !== type) return false;
@@ -93,7 +102,7 @@ export class TokenStream {
         return true;
     }
 
-    expect<T extends LexerToken['type']>(type: T, val?: TokenOfType<T>['value']): TokenOfType<T> {
+    expect<T extends TokenType>(type: T, val?: TokenOfType<T>['value']): TokenOfType<T> {
         const t = this.consume();
 
         if (t.type !== type)
@@ -121,9 +130,14 @@ export class TokenStream {
     get index() {
         return this._index;
     }
+
+    public *[Symbol.iterator]() {
+        for (let t of this._tokens)
+            yield t;
+    }
 }
 
-export function discardAndReturn<T extends LexerToken['type']>(ctx: LexerContext, type: T, value: TokenOfType<T>['value'], n: number = 1) {
+export function discardAndReturn<T extends TokenType>(ctx: LexerContext, type: T, value: TokenOfType<T>['value'], n: number = 1) {
     ctx.discard(n);
     return {
         type,
@@ -154,13 +168,13 @@ export const defaultAutomata: LexerAutomaton[] = [
 
         if (current === "//") {
             c.discard(2);
-            while (current !== "\n") accumulator += current = c.consume();
+            while (current !== "\n" && !c.eof()) accumulator += current = c.consume();
         } else if (current === "/*") {
             c.discard(2);
-            while (current !== "/" && accumulator.at(-1) !== "*")
+            while (current !== "/" && accumulator.at(-1) !== "*" && !c.eof())
                 accumulator += current = c.consume();
         } else if (current[0] === "#") {
-            while (c.peek() !== "\n") accumulator += c.consume();
+            while (c.peek() !== "\n" && !c.eof()) accumulator += c.consume();
             return {
                 type: "directive",
                 value: accumulator,
@@ -196,8 +210,7 @@ export const defaultAutomata: LexerAutomaton[] = [
             let floatMode = 0;
             while (/[0-9\.f]/.test(c.peek())) {
                 if (floatMode == 2) {
-                    console.log("double error : ", accumulator);
-                    return; // Should throw an Error, TODO
+                    return; // TODO : Should throw an Error
                 } else if (c.peek() === ".") {
                     if (floatMode) return;
                     floatMode = 1;

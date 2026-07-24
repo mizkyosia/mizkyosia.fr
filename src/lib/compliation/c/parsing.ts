@@ -16,9 +16,9 @@ export class Parser {
 
     public getTypes() {
         return {
-            structs: this._structs.entries().toArray(),
-            unions: this._unions.entries().toArray(),
-            typedefs: this._typedefs.entries().toArray()
+            structs: this._structs,
+            unions: this._unions,
+            typedefs: this._typedefs
         }
     }
 
@@ -27,7 +27,8 @@ export class Parser {
 
         this._structs.clear();
         this._unions.clear();
-        this._typedefs.clear();
+
+        this.setupTypes();
 
         let i = 0;
 
@@ -55,6 +56,20 @@ export class Parser {
         }
 
         return defs;
+    }
+
+    private setupTypes() {
+        const intsizes = [8, 16, 32, 64],
+            suffixes = ['', '_least', '_fast'],
+            prefixes = ['', 'u'];
+        const typedefs: [string, TypeData][] = [];
+
+        for (const size of intsizes)
+            for (const suffix of suffixes)
+                for (const prefix of prefixes)
+                    typedefs.push([`${prefix}int${suffix}${size}_t`, { size, align: size, forward: false }])
+
+        this._typedefs = new Map(typedefs);
     }
 
     private parseFields(ts: TokenStream): Field[] {
@@ -129,6 +144,9 @@ export class Parser {
 
             res.name = ident.value;
 
+            // For syntax highlighting
+            ident.isField = true;
+
             // Try to parse array notation
             while (ts.match('bracket', '[')) {
                 ts.consume();
@@ -157,8 +175,6 @@ export class Parser {
 
             fields.push(res);
         }
-
-        console.log(ts.peek());
 
         // If U|S declaration, field is allowed to be anonymous
         if (ts.match('semicolon') && (base.type.kind === 'union' || base.type.kind === 'struct') && base.type.members !== undefined) {

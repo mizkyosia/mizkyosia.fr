@@ -23,8 +23,13 @@
 		"vite": "^8.0.16"
 	},
 	"dependencies": {
+		"@codemirror/language": "^6.12.4",
+		"@codemirror/state": "^6.7.1",
+		"@codemirror/theme-one-dark": "^6.1.3",
+		"@codemirror/view": "^6.43.6",
 		"@threlte/core": "^8.5.16",
 		"@threlte/extras": "^9.21.0",
+		"codemirror": "^6.0.2",
 		"dotenv": "^17.4.2",
 		"stats.js": "^0.17.0",
 		"three": "^0.185.1"

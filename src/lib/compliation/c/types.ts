@@ -2,7 +2,9 @@ import type { LexerContext } from "./lexing";
 
 interface SimpleToken<T, V> {
     type: T,
-    value: V
+    value: V,
+    start: number,
+    end: number,
 }
 
 export const keywords = <const>["alignas",
@@ -119,7 +121,7 @@ export type FloatLiteral = SimpleToken<"float", number> & { isDouble: boolean };
 export type Keyword = SimpleToken<"keyword", KeywordValue>;
 export type TypeQualifier = SimpleToken<"type_qualifier", TypeQualifierValue>;
 export type BuiltinType = SimpleToken<"typename", BuiltinTypeName>;
-export type Identifier = SimpleToken<"identifier", string>;
+export type Identifier = SimpleToken<"identifier", string> & { isType?: boolean; isField?: boolean };
 export type Comment = SimpleToken<"comment", string>;
 export type Directive = SimpleToken<"directive", string>;
 
@@ -175,11 +177,13 @@ export type LexerTokenList = [Star,
     Empty];
 
 export type LexerToken = LexerTokenList[number];
+export type TokenType = LexerToken['type'];
 
 // Utility: map a token `type` literal to the corresponding token shape
-export type TokenOfType<T extends LexerToken['type']> = Extract<LexerToken, { type: T }>;
+export type TokenOfType<T extends TokenType> = Extract<LexerToken, { type: T }>;
+export type ReducedLexerToken = Omit<LexerToken, "start" | "end">;
 
-export type LexerAutomaton = (ctx: LexerContext) => LexerToken | void;
+export type LexerAutomaton = (ctx: LexerContext) => ReducedLexerToken | void;
 
 //! ======================== TYPE DEFS ======================== 
 
