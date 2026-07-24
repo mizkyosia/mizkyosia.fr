@@ -30,13 +30,11 @@ export class Parser {
 
         this.setupTypes();
 
-        let i = 0;
-
-        while (!ts.eof() && i < 10_000) {
-            if (this.isTypedef(ts))
+        while (!ts.eof()) {
+            if (this.isTypedef(ts)) {
                 defs.push(...this.parseTypedef(ts));
-            // Forward declaration
-            else if (this.isUnionOrStructRef(ts)) {
+                // Forward declaration
+            } else if (this.isUnionOrStructRef(ts)) {
                 this.parseUnionOrStructRef(ts, true);
                 ts.expect('semicolon');
             } else if (this.isUnionOrStructDef(ts)) {
@@ -52,7 +50,6 @@ export class Parser {
             } else
                 this.skipDeclaration(ts);
 
-            i++;
         }
 
         return defs;
@@ -274,9 +271,15 @@ export class Parser {
     }
 
     private skipDeclaration(ts: TokenStream) {
-        let braceLevel = 0, bracketLevel = 0, parenLevel = 0, initialIndex = ts.index;
+        let braceLevel = 0, bracketLevel = 0, parenLevel = 0;
 
-        while (braceLevel > 0 || bracketLevel > 0 || parenLevel > 0 || !(ts.match('keyword', 'typedef') || ts.match('keyword', 'union') || ts.match('keyword', 'struct'))) {
+        while (
+            (braceLevel > 0
+                || bracketLevel > 0
+                || parenLevel > 0
+                || !((ts.match('keyword', 'typedef') || ts.match('keyword', 'union') || ts.match('keyword', 'struct')) && ts.peek(1).type !== 'empty'))
+            && !ts.eof()
+        ) {
             const t = ts.consume();
 
             switch (t.type) {

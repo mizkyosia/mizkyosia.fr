@@ -1,6 +1,6 @@
 <script lang="ts">
-    import { containsUOSDeclaration } from "$lib/compliation/c/parsing";
-    import type { TypeDefinition } from "$lib/compliation/c/types";
+    import { containsUOSDeclaration } from "$lib/compilation/c/parsing";
+    import type { TypeDefinition } from "$lib/compilation/c/types";
     import Type from "./Type.svelte";
     import Field from "./Field.svelte";
 

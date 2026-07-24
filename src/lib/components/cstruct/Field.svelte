@@ -1,6 +1,6 @@
 <script lang="ts">
-    import { containsUOSDeclaration } from "$lib/compliation/c/parsing";
-    import type { Field } from "$lib/compliation/c/types";
+    import { containsUOSDeclaration } from "$lib/compilation/c/parsing";
+    import type { Field } from "$lib/compilation/c/types";
     import Type from "./Type.svelte";
 
     interface Props {

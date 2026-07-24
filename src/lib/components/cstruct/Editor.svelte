@@ -32,13 +32,13 @@
         highlightSpecialChars,
         type DecorationSet,
     } from "@codemirror/view";
-    import type { TokenType, TypeDefinition } from "$lib/compliation/c/types";
+    import type { TokenType, TypeDefinition } from "$lib/compilation/c/types";
     import {
         defaultAutomata,
         Lexer,
         TokenStream,
-    } from "$lib/compliation/c/lexing";
-    import { Parser } from "$lib/compliation/c/parsing";
+    } from "$lib/compilation/c/lexing";
+    import { Parser } from "$lib/compilation/c/parsing";
 
     interface Props {
         value: string;
@@ -81,6 +81,7 @@
                     highlightActiveLine(),
                     highlightSpecialChars(),
                     indentUnit.of("    "),
+                    indentOnInput(),
                     history(),
                     keymap.of([
                         ...defaultKeymap,
@@ -91,26 +92,6 @@
                     syntaxHighlightField,
                 ],
             }),
-            dispatchTransactions(trs, view) {
-                value = trs[trs.length - 1].state.doc.toString();
-
-                tokens = lexer.lexSync(value);
-
-                try {
-                    definitions = parser.parse(tokens);
-                    const { typedefs } = parser.getTypes();
-
-                    for (const t of tokens)
-                        if (t.type === "identifier" && typedefs.has(t.value))
-                            t.isType = true;
-                } catch (e) {
-                    console.log((e as Error).message);
-                    definitions = [];
-                }
-
-                // Update visuals last, after parsing
-                view.update(trs);
-            },
         });
     });
 
@@ -128,21 +109,37 @@
         white = dec("text-[#fbf1c7]"),
         comment = dec("italic");
 
-    export const syntaxHighlightField = StateField.define<DecorationSet>({
+    const syntaxHighlightField = StateField.define<DecorationSet>({
         create(state) {
-            return buildDecorations(state.doc.toString());
+            return buildDecorations();
         },
 
         update(decorations, tr) {
             if (!tr.docChanged) return decorations;
 
-            return buildDecorations(value);
+            value = tr.state.doc.toString();
+
+            tokens = lexer.lexSync(value);
+
+            try {
+                definitions = parser.parse(tokens);
+                const { typedefs } = parser.getTypes();
+
+                for (const t of tokens)
+                    if (t.type === "identifier" && typedefs.has(t.value))
+                        t.isType = true;
+            } catch (e) {
+                console.log((e as Error).message);
+                definitions = [];
+            }
+
+            return buildDecorations();
         },
 
         provide: (f) => EditorView.decorations.from(f),
     });
 
-    function buildDecorations(source: string): DecorationSet {
+    function buildDecorations(): DecorationSet {
         const builder = new RangeSetBuilder<Decoration>();
 
         for (const token of tokens) {

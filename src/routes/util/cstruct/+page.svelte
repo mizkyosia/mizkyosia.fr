@@ -1,10 +1,8 @@
 <script lang="ts">
-    import { TokenStream } from "$lib/compliation/c/lexing";
-    import { Parser } from "$lib/compliation/c/parsing";
+    import { TokenStream } from "$lib/compilation/c/lexing";
     import {
-        type LexerToken,
         type TypeDefinition,
-    } from "$lib/compliation/c/types";
+    } from "$lib/compilation/c/types";
     import Definition from "$lib/components/cstruct/Definition.svelte";
     import Editor from "$lib/components/cstruct/Editor.svelte";
 

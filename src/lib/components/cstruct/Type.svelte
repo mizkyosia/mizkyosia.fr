@@ -3,7 +3,7 @@
         StructDefinition,
         TypeReference,
         UnionDefinition,
-    } from "$lib/compliation/c/types";
+    } from "$lib/compilation/c/types";
 
     import Type from "./Type.svelte";
     import Definition from "./Definition.svelte";
