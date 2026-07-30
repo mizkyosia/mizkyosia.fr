@@ -21,9 +21,11 @@
         max = 1000,
     }: Props = $props();
 
-    let precision = $derived(Math.floor(Math.log10(1 / Math.min(1, step))));
+    let precision = $derived(
+        Math.max(0, Math.floor(Math.log10(1 / Math.min(1, step)))),
+    );
     let sigDigits = $derived(
-        Math.max(0, (Math.floor(Math.log10(Math.abs(value))) || 0) + 1),
+        Math.max(0, Math.floor(Math.log10(Math.abs(value))) || 0) + 1,
     );
     let preciseValue = $derived(value.toPrecision(precision + sigDigits));
 
@@ -40,11 +42,13 @@
 
         const delta = e.clientX - prevX;
 
-        value +=
+        let newValue =
+            value +
             Math.round((delta * multiplier + Number.EPSILON) / step) * step;
 
-        if (value < min) value = min;
-        else if (value > max) value = max;
+        if (newValue < min) value = min;
+        else if (newValue > max) value = max;
+        else value = newValue;
 
         prevX = e.clientX;
     }

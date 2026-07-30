@@ -15,7 +15,7 @@ void main() {
 
     vec3 color = mix(blue, orange, vDensity);
     // vec3 color = mix(black, white, vDensity);
-    // vec3 color = vec3(vDensity / 20.0);
+    // vec3 color = vec3(vPressure);
 
     // if(abs(vPressure) < pressureThreshold)
     //     color = mix(blue, orange, (1.0 + vPressure / pressureThreshold) / 2.0);

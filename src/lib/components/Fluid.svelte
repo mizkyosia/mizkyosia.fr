@@ -1,5 +1,5 @@
 <script lang="ts">
-    import { spiky } from "$lib/kernels";
+    import { spiky, spikyGrad } from "$lib/kernels";
     import {
         Box3,
         BufferAttribute,
@@ -8,6 +8,7 @@
         Scene,
         Vector3,
         WebGLRenderer,
+        type Vector3Like,
     } from "three";
 
     interface Props {
@@ -21,7 +22,7 @@
 
         pressureStiffness?: number;
 
-        chunksCount?: Vector3;
+        chunksCount?: Vector3Like;
         chunkSize?: number;
 
         reboundMult?: number;
@@ -33,6 +34,11 @@
     }
 
     type Chunk = Set<number>;
+    interface ChunkUpdate {
+        old: Chunk;
+        new: Chunk;
+        particle: number;
+    }
 
     let {
         particleCount = 100,
@@ -43,11 +49,11 @@
         densityRadius = $bindable(chunkSize),
         densityRest = $bindable(10),
 
-        gravity = $bindable(-9.8),
+        gravity = $bindable(9.8),
 
         pressureStiffness = $bindable(4),
 
-        chunksCount = $bindable(new Vector3(4, 4, 1)),
+        chunksCount = { x: 4, y: 4, z: 1 },
 
         reboundMult = $bindable(0.7),
     }: Props = $props();
@@ -80,16 +86,28 @@
 
     // Constants
     const chunks: Chunk[][] = [];
+    const chunkUpdates: ChunkUpdate[] = [];
     const bounds = new Box3(
-        chunksCount
-            .clone()
+        new Vector3(chunksCount.x, chunksCount.y, chunksCount.z)
             .multiplyScalar(densityRadius / 2)
             .negate(),
-        chunksCount.clone().multiplyScalar(densityRadius / 2),
+        new Vector3(chunksCount.x, chunksCount.y, chunksCount.z).multiplyScalar(
+            densityRadius / 2,
+        ),
     );
 
+    $effect(() => {
+        chunksCount;
+        bounds.min
+            .set(chunksCount.x, chunksCount.y, chunksCount.z)
+            .multiplyScalar(densityRadius / 2)
+            .negate();
+        bounds.max
+            .set(chunksCount.x, chunksCount.y, chunksCount.z)
+            .multiplyScalar(densityRadius / 2);
+    });
+
     // Variables
-    let densityRadiusPrev = $state.snapshot(densityRadius);
 
     // States
     const densityRadiusSqr = $derived(densityRadius * densityRadius);
@@ -183,17 +201,97 @@
             density[i] = computeDensity(position[3 * i], position[3 * i + 1]);
         }
 
+        // Compute pressure
+        for (let i = 0; i < particleCount; i++) {
+            pressure[i] = pressureStiffness * (density[i] - densityRest);
+        }
+
+        // console.log(density);
+
         // Update position
         for (let i = 0; i < particleCount; i++) {
-            positionNext[3 * i] = position[3 * i];
-            positionNext[3 * i + 1] = position[3 * i + 1];
+            let x = position[3 * i],
+                y = position[3 * i + 1],
+                vx = velocity[3 * i],
+                vy = velocity[3 * i + 1],
+                ax = 0,
+                ay = 0; // Add gravity later
+
+            const oldChunk = getChunk(x, y);
+
+            // Calculate forces
+            eachNearbyParticle(x, y, (j) => {
+                let dx = x - position[3 * j],
+                    dy = y - position[3 * j + 1];
+
+                let r2 = dx * dx + dy * dy,
+                    r;
+
+                // Pick random direction
+                if (r2 === 0) {
+                    let a = Math.random() * Math.PI * 2;
+                    dx = Math.cos(a);
+                    dy = Math.sin(a);
+                    r = 1;
+                    r2 = 1;
+                } else r = Math.sqrt(r2);
+
+                const influence =
+                    (spikyGrad(r, densityRadius) *
+                        (pressure[i] + pressure[j])) /
+                    (2 * Math.max(density[j], 1e-12));
+
+                if (isNaN(density[j]) || density[j] === 0) console.log("test");
+
+                // Add normalized direction
+                ax += (-influence * dx) / r;
+                ay += (-influence * dy) / r;
+            });
+
+            vx += ax * dt;
+            vy += ay * dt;
+            x += vx * dt;
+            y += vy * dt;
+
+            // Check out of bounds
+            if (x < bounds.min.x + particleSize) {
+                x = bounds.min.x + particleSize;
+                vx = reboundMult * Math.abs(vx);
+            } else if (x > bounds.max.x - particleSize) {
+                x = bounds.max.x - particleSize;
+                vx = -reboundMult * Math.abs(vx);
+            }
+            if (y < bounds.min.y + particleSize) {
+                y = bounds.min.y + particleSize;
+                vy = reboundMult * Math.abs(vy);
+            } else if (y > bounds.max.y - particleSize) {
+                y = bounds.max.y - particleSize;
+                vy = -reboundMult * Math.abs(vy);
+            }
+
+            positionNext[3 * i] = x;
+            positionNext[3 * i + 1] = y;
+            velocityNext[3 * i] = vx;
+            velocityNext[3 * i + 1] = vy;
+
+            // Chunk change
+            const newChunk = getChunk(x, y);
+            if (newChunk !== oldChunk)
+                chunkUpdates.push({
+                    old: oldChunk,
+                    new: newChunk,
+                    particle: i,
+                });
         }
 
         updateBuffers();
+
+        // Update chunks
+        for (let update of chunkUpdates.splice(0)) {
+            update.old.delete(update.particle);
+            update.new.add(update.particle);
+        }
     }
 
     //! ============== Effects
-    $effect(() => {
-        densityRadiusPrev = $state.snapshot(densityRadius);
-    });
 </script>
