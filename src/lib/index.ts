@@ -29,3 +29,27 @@ export function pointInTriangle(
 
     return u >= 0 && v >= 0 && u + v <= 1;
 }
+
+export const gruvbox = {
+    redLight: '#fb4934',
+    greenLight: '#b8bb26',
+    yellowLight: '#fabd2f',
+    blueLight: '#83a598',
+    purpleLight: '#d3869b',
+    aquaLight: '#8ec07c',
+    orangeLight: '#fe8019',
+
+    gray: '#928374',
+
+    grayDark0: '#282828',
+    grayDark1: '#3c3836',
+    grayDark2: '#504945',
+    grayDark3: '#665c54',
+    grayDark4: '#7c6f64',
+
+    grayLight0: '#fbf1c7',
+    grayLight1: '#ebdbb2',
+    grayLight2: '#d5c4a1',
+    grayLight3: '#bdae93',
+    grayLight4: '#a89984',
+}

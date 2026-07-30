@@ -1,5 +1,4 @@
 <script lang="ts">
-	import "./layout.css";
 	import favicon from "$lib/assets/favicon.svg";
 	import { Canvas, T } from "@threlte/core";
 	import { Environment, Grid, OrbitControls } from "@threlte/extras";
@@ -21,10 +20,8 @@
 				ref.lookAt(0, 0, 0);
 			}}
 		>
-			<!-- <OrbitControls /> -->
+			<OrbitControls />
 		</T.PerspectiveCamera>
-
-		<Environment url="/shanghai_riverside_1k.hdr" />
 
 		<!-- <Grid
 			position.y={-1}
