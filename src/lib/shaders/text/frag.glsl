@@ -23,7 +23,7 @@ void main() {
 
     float r = length(uv);
 
-    float alpha = smoothstep(1.0, 0.9, r);
+    float alpha = (0.9 - r) / 2.0;
 
     gl_FragColor = vec4(color, alpha);
 }

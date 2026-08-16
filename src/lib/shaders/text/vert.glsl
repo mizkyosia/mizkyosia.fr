@@ -1,6 +1,9 @@
 varying vec3 vPosition;
 varying vec2 vUv;
 
+uniform vec2 uScreen;
+uniform float uFov;
+
 void main() {
     vPosition = position;
 
@@ -10,5 +13,7 @@ void main() {
 
     vUv = uv;
 
-    gl_PointSize = -100.0/mvPosition.z;
+    gl_PointSize = 0.8 *
+        uScreen.y /
+        (2.0 * tan(uFov * 0.5) * abs(mvPosition.z));
 }
